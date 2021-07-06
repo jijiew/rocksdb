@@ -1542,6 +1542,121 @@ TEST_F(ExternalSSTFileBasicTest, OverlappingFiles) {
   ASSERT_EQ(2, NumTableFilesAtLevel(0));
 }
 
+TEST_F(ExternalSSTFileBasicTest, IngestFileAfterDBPut) {
+  Options options = CurrentOptions();
+
+  ASSERT_OK(Put("k", "a"));
+  Flush();
+  ASSERT_OK(Put("k", "a"));
+  Flush();
+  ASSERT_OK(Put("k", "a"));
+  Flush();
+  ASSERT_OK(Put("j", "a"));
+  Flush();
+  ASSERT_OK(Put("l", "c"));
+  Flush();
+  SstFileWriter sst_file_writer(EnvOptions(), options);
+
+  // Current file size should be 0 after sst_file_writer init and before open a
+  // file.
+  ASSERT_EQ(sst_file_writer.FileSize(), 0);
+
+  std::string file1 = sst_files_dir_ + "file1.sst";
+  ASSERT_OK(sst_file_writer.Open(file1));
+  ASSERT_OK(sst_file_writer.Put("k", "b"));
+
+  ExternalSstFileInfo file1_info;
+  Status s = sst_file_writer.Finish(&file1_info);
+  ASSERT_OK(s) << s.ToString();
+
+  // Current file size should be non-zero after success write.
+  ASSERT_GT(sst_file_writer.FileSize(), 0);
+
+  IngestExternalFileOptions ifo;
+  s = db_->IngestExternalFile({file1}, ifo);
+  ASSERT_OK(s);
+  ASSERT_OK(dbfull()->TEST_WaitForCompact());
+
+  ASSERT_EQ(Get("k"), "b");
+  ASSERT_EQ(Get("j"), "a");
+  ASSERT_EQ(Get("l"), "c");
+}
+
+TEST_F(ExternalSSTFileBasicTest, IngestFileAfterDBPutNoFlush) {
+  Options options = CurrentOptions();
+
+  ASSERT_OK(Put("k", "a"));
+  ASSERT_OK(Put("k", "a"));
+  ASSERT_OK(Put("k", "a"));
+  ASSERT_OK(Put("j", "a"));
+  ASSERT_OK(Put("l", "c"));
+
+  SstFileWriter sst_file_writer(EnvOptions(), options);
+
+  // Current file size should be 0 after sst_file_writer init and before open a
+  // file.
+  ASSERT_EQ(sst_file_writer.FileSize(), 0);
+
+  std::string file1 = sst_files_dir_ + "file1.sst";
+  ASSERT_OK(sst_file_writer.Open(file1));
+  ASSERT_OK(sst_file_writer.Put("k", "b"));
+
+  ExternalSstFileInfo file1_info;
+  Status s = sst_file_writer.Finish(&file1_info);
+  ASSERT_OK(s) << s.ToString();
+
+  // Current file size should be non-zero after success write.
+  ASSERT_GT(sst_file_writer.FileSize(), 0);
+
+  IngestExternalFileOptions ifo;
+  s = db_->IngestExternalFile({file1}, ifo);
+  ASSERT_OK(s);
+  ASSERT_OK(dbfull()->TEST_WaitForCompact());
+
+  ASSERT_EQ(Get("k"), "b");
+  ASSERT_EQ(Get("j"), "a");
+  ASSERT_EQ(Get("l"), "c");
+}
+
+TEST_F(ExternalSSTFileBasicTest, IngestFileAfterDBPutNoCompact) {
+  Options options = CurrentOptions();
+
+  ASSERT_OK(Put("k", "a"));
+  Flush();
+  ASSERT_OK(Put("k", "a"));
+  Flush();
+  ASSERT_OK(Put("k", "a"));
+  Flush();
+  ASSERT_OK(Put("j", "a"));
+  Flush();
+  ASSERT_OK(Put("l", "c"));
+  Flush();
+  SstFileWriter sst_file_writer(EnvOptions(), options);
+
+  // Current file size should be 0 after sst_file_writer init and before open a
+  // file.
+  ASSERT_EQ(sst_file_writer.FileSize(), 0);
+
+  std::string file1 = sst_files_dir_ + "file1.sst";
+  ASSERT_OK(sst_file_writer.Open(file1));
+  ASSERT_OK(sst_file_writer.Put("k", "b"));
+
+  ExternalSstFileInfo file1_info;
+  Status s = sst_file_writer.Finish(&file1_info);
+  ASSERT_OK(s) << s.ToString();
+
+  // Current file size should be non-zero after success write.
+  ASSERT_GT(sst_file_writer.FileSize(), 0);
+
+  IngestExternalFileOptions ifo;
+  s = db_->IngestExternalFile({file1}, ifo);
+  ASSERT_OK(s);
+
+  ASSERT_EQ(Get("k"), "b");
+  ASSERT_EQ(Get("j"), "a");
+  ASSERT_EQ(Get("l"), "c");
+}
+
 INSTANTIATE_TEST_CASE_P(ExternalSSTFileBasicTest, ExternalSSTFileBasicTest,
                         testing::Values(std::make_tuple(true, true),
                                         std::make_tuple(true, false),
